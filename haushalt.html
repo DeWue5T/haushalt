@@ -148,6 +148,17 @@ input[type=text]:focus,input[type=number]:focus,input[type=date]:focus,select:fo
 
 /* SORT ROW */
 .sort-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+
+/* LOADING */
+.loading-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(247,247,248,0.95);z-index:500;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}
+.loading-overlay.hidden{display:none}
+.spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-text{font-size:14px;color:var(--text2);font-weight:500}
+.sync-indicator{position:fixed;top:12px;right:12px;font-size:11px;padding:4px 10px;border-radius:20px;font-weight:600;z-index:200;display:none}
+.sync-indicator.saving{background:#FAEEDA;color:#854F0B;display:block}
+.sync-indicator.saved{background:#EAF3DE;color:#3B6D11;display:block}
+.sync-indicator.error{background:#FCEBEB;color:#A32D2D;display:block}
 </style>
 </head>
 <body>
@@ -166,6 +177,11 @@ input[type=text]:focus,input[type=number]:focus,input[type=date]:focus,select:fo
 </div>
 
 <div class="app">
+<div class="loading-overlay" id="loading-overlay">
+  <div class="spinner"></div>
+  <div class="loading-text">Daten werden geladen…</div>
+</div>
+<div class="sync-indicator" id="sync-indicator"></div>
 
 <!-- NEU -->
 <div id="screen-neu" class="screen active">
@@ -388,6 +404,8 @@ input[type=text]:focus,input[type=number]:focus,input[type=date]:focus,select:fo
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwiB4REpMrBZGkLQvqrZHHbQg20-_p-CA9O0K7_cCOy1bBS_8AIV6tOVIDE-ZOqbQ-deg/exec';
+const SECRET = '031011';
 const BUDGET_CATS=['Lebensmittel','Drogerie'];
 const TRACK_CATS=['Urlaub','Bestellen','Restaurant','Sonstiges'];
 const TILGUNG_FLAG='Überschuss-Tilgung';
@@ -621,6 +639,7 @@ function toggleAbhak(key,btn,m,y){
     if(c.otherUeb>0) ueberschuss[c.otherName]=Math.max(0,(ueberschuss[c.otherName]||0)-c.otherUeb);
   }
   renderMonat();
+  saveConfigToSheet();
 }
 
 function toggleMonatDrawer(){document.getElementById('monat-filter-drawer').classList.toggle('open');updateMonatFilterUI()}
@@ -689,9 +708,11 @@ function confirmDelete(){
     if(c.otherUeb>0)ueberschuss[c.otherName]=Math.max(0,(ueberschuss[c.otherName]||0)-c.otherUeb);
     abhakStatus[mKey]=false;
   }
+  const deletedEntry = entries[pendingDeleteIdx];
   entries.splice(pendingDeleteIdx,1);
   closeConfirm();
   renderMonat();
+  if (deletedEntry.id) deleteEntryFromSheet(deletedEntry.id);
 }
 
 // VERLAUF
@@ -851,6 +872,7 @@ function saveTilgung(){
   document.getElementById('tilg-betrag').value='';
   document.getElementById('tilg-notiz').value='';
   renderUeberschuss();
+  saveConfigToSheet();
 }
 function renderTilgungen(){
   const te=entries.filter(e=>e.flags.includes(TILGUNG_FLAG)).sort((a,b)=>new Date(b.datum)-new Date(a.datum));
@@ -868,6 +890,7 @@ function saveBudget(){
   budgetHistory.push({betrag,ab,traeger});
   budgetHistory.sort((a,b)=>a.ab.localeCompare(b.ab));
   renderBudgetHistory();renderMonat();
+  saveConfigToSheet();
 }
 function renderBudgetHistory(){
   const sorted=[...budgetHistory].sort((a,b)=>b.ab.localeCompare(a.ab));
@@ -905,6 +928,8 @@ function saveEntry(){
   const _nd=new Date(datum);
   currentMonth=_nd.getMonth();
   currentYear=_nd.getFullYear();
+  // Save to sheet async
+  saveEntryToSheet(newEntry).then(id => { if(id) newEntry.id = id; });
   
   // Vibration
   if(navigator.vibrate)navigator.vibrate(80);
@@ -949,13 +974,82 @@ function undoEntry(){
   renderMonat();
 }
 
-// Init
-const today=new Date().toISOString().split('T')[0];
-document.getElementById('inp-datum').value=today;
-document.getElementById('budget-ab').value=today;
-renderFlagChips();
-renderBudgetHistory();
-renderMonat();
+// ── GOOGLE SHEETS API ────────────────────────────────────────────
+async function apiCall(params) {
+  const url = new URL(SCRIPT_URL);
+  params.token = SECRET;
+  Object.entries(params).forEach(([k,v]) => url.searchParams.set(k, v));
+  try {
+    const res = await fetch(url.toString());
+    return await res.json();
+  } catch(err) {
+    showSync('error', '⚠️ Offline');
+    return { error: err.toString() };
+  }
+}
+
+function showSync(type, text) {
+  const el = document.getElementById('sync-indicator');
+  el.className = 'sync-indicator ' + type;
+  el.textContent = text;
+  if (type === 'saved') setTimeout(() => el.className = 'sync-indicator', 2500);
+}
+
+async function loadFromSheet() {
+  document.getElementById('loading-overlay').classList.remove('hidden');
+  const result = await apiCall({ action: 'getAll' });
+  document.getElementById('loading-overlay').classList.add('hidden');
+  if (result.error) { showSync('error', '⚠️ Fehler beim Laden'); return; }
+
+  // Load entries
+  if (result.entries && result.entries.length) {
+    entries = result.entries.map(e => ({
+      ...e,
+      betrag: parseFloat(e.betrag),
+      flags: e.flags || []
+    }));
+  }
+
+  // Load config
+  if (result.config) {
+    const cfg = result.config;
+    if (cfg.budgetHistory) budgetHistory = cfg.budgetHistory;
+    if (cfg.abhakStatus) abhakStatus = cfg.abhakStatus;
+    if (cfg.ueberschuss) ueberschuss = cfg.ueberschuss;
+    if (cfg.customFlags) customFlags = cfg.customFlags;
+  }
+
+  renderFlagChips();
+  renderBudgetHistory();
+  renderMonat();
+}
+
+async function saveEntryToSheet(entry) {
+  showSync('saving', '⏳ Speichern…');
+  const result = await apiCall({ action: 'addEntry', data: JSON.stringify(entry) });
+  if (result.error) { showSync('error', '⚠️ Fehler'); return null; }
+  showSync('saved', '✓ Gespeichert');
+  return result.id;
+}
+
+async function deleteEntryFromSheet(id) {
+  showSync('saving', '⏳ Löschen…');
+  const result = await apiCall({ action: 'deleteEntry', id: id.toString() });
+  if (result.error) { showSync('error', '⚠️ Fehler'); return false; }
+  showSync('saved', '✓ Gelöscht');
+  return true;
+}
+
+async function saveConfigToSheet() {
+  const config = { budgetHistory, abhakStatus, ueberschuss, customFlags };
+  await apiCall({ action: 'saveConfig', data: JSON.stringify(config) });
+}
+
+// ── INIT ────────────────────────────────────────────────────────
+const today = new Date().toISOString().split('T')[0];
+document.getElementById('inp-datum').value = today;
+document.getElementById('budget-ab').value = today;
+loadFromSheet();
 </script>
 </body>
 </html>
