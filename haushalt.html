@@ -976,14 +976,16 @@ function undoEntry(){
 
 // ── GOOGLE SHEETS API ────────────────────────────────────────────
 async function apiCall(params) {
-  const url = new URL(SCRIPT_URL);
   params.token = SECRET;
-  Object.entries(params).forEach(([k,v]) => url.searchParams.set(k, v));
+  const url = new URL(SCRIPT_URL);
+  Object.entries(params).forEach(([k,v]) => url.searchParams.set(k, String(v)));
   try {
-    const res = await fetch(url.toString());
-    return await res.json();
+    const res = await fetch(url.toString(), {redirect: 'follow'});
+    const text = await res.text();
+    return JSON.parse(text);
   } catch(err) {
-    showSync('error', '⚠️ Offline');
+    console.error('API error:', err);
+    showSync('error', '⚠️ Verbindungsfehler');
     return { error: err.toString() };
   }
 }
@@ -999,9 +1001,14 @@ async function loadFromSheet() {
   document.getElementById('loading-overlay').classList.remove('hidden');
   const result = await apiCall({ action: 'getAll' });
   document.getElementById('loading-overlay').classList.add('hidden');
-  if (result.error) { showSync('error', '⚠️ Fehler beim Laden'); return; }
-
-  // Load entries
+  if (result.error) {
+    console.error('Load error:', result.error);
+    showSync('error', '⚠️ Fehler beim Laden');
+    renderFlagChips();
+    renderBudgetHistory();
+    renderMonat();
+    return;
+  }
   if (result.entries && result.entries.length) {
     entries = result.entries.map(e => ({
       ...e,
@@ -1009,26 +1016,25 @@ async function loadFromSheet() {
       flags: e.flags || []
     }));
   }
-
-  // Load config
   if (result.config) {
     const cfg = result.config;
-    if (cfg.budgetHistory) budgetHistory = cfg.budgetHistory;
+    if (cfg.budgetHistory && cfg.budgetHistory.length) budgetHistory = cfg.budgetHistory;
     if (cfg.abhakStatus) abhakStatus = cfg.abhakStatus;
     if (cfg.ueberschuss) ueberschuss = cfg.ueberschuss;
     if (cfg.customFlags) customFlags = cfg.customFlags;
   }
-
   renderFlagChips();
   renderBudgetHistory();
   renderMonat();
+  console.log('Loaded', entries.length, 'entries');
 }
 
 async function saveEntryToSheet(entry) {
   showSync('saving', '⏳ Speichern…');
   const result = await apiCall({ action: 'addEntry', data: JSON.stringify(entry) });
-  if (result.error) { showSync('error', '⚠️ Fehler'); return null; }
+  if (result.error) { showSync('error', '⚠️ Fehler'); console.error('Save error:', result.error); return null; }
   showSync('saved', '✓ Gespeichert');
+  console.log('Saved entry, id:', result.id);
   return result.id;
 }
 
@@ -1042,7 +1048,8 @@ async function deleteEntryFromSheet(id) {
 
 async function saveConfigToSheet() {
   const config = { budgetHistory, abhakStatus, ueberschuss, customFlags };
-  await apiCall({ action: 'saveConfig', data: JSON.stringify(config) });
+  const result = await apiCall({ action: 'saveConfig', data: JSON.stringify(config) });
+  if (result.error) console.error('Config save error:', result.error);
 }
 
 // ── INIT ────────────────────────────────────────────────────────
