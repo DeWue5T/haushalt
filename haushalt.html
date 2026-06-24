@@ -400,7 +400,8 @@ function getBudgetForMonth(m,y){
   return a.length?a[0]:{betrag:500,traeger:'Corinna'};
 }
 
-let currentMonth=5,currentYear=2025;
+const _now=new Date();
+let currentMonth=_now.getMonth(),currentYear=_now.getFullYear();
 let monatFilterPerson='Alle',monatFilterKat='Alle',monatSort='datum';
 let vZeitraum=3,vPerson='Alle',vKat='Alle',vDateFrom='',vDateTo='';
 let abhakStatus={};
@@ -900,6 +901,10 @@ function saveEntry(){
   const newEntry={datum,betrag,beschreibung,kat1,person,flags:[...selectedFlags]};
   entries.push(newEntry);
   lastSavedEntry=newEntry;
+  // Switch monat view to match the new entry's month
+  const _nd=new Date(datum);
+  currentMonth=_nd.getMonth();
+  currentYear=_nd.getFullYear();
   
   // Vibration
   if(navigator.vibrate)navigator.vibrate(80);
