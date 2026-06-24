@@ -405,7 +405,6 @@ let monatFilterPerson='Alle',monatFilterKat='Alle',monatSort='datum';
 let vZeitraum=3,vPerson='Alle',vKat='Alle',vDateFrom='',vDateTo='';
 let abhakStatus={};
 let ueberschuss={Dennis:0,Corinna:0};
-let monatDirty=false;
 let verlaufChart=null;
 let selectedFlags=[],customFlags=[];
 let lastSavedEntry=null,undoTimer=null,pendingDeleteIdx=null;
@@ -524,7 +523,7 @@ function showScreen(name,btn){
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('screen-'+name).classList.add('active');
   btn.classList.add('active');
-  if(name==='monat'){renderMonat();monatDirty=false;}
+  if(name==="monat"){renderMonat();}
   if(name==='verlauf')renderVerlauf();
   if(name==='ueberschuss')renderUeberschuss();
 }
@@ -901,8 +900,7 @@ function saveEntry(){
   const newEntry={datum,betrag,beschreibung,kat1,person,flags:[...selectedFlags]};
   entries.push(newEntry);
   lastSavedEntry=newEntry;
-  monatDirty=true;
-
+  
   // Vibration
   if(navigator.vibrate)navigator.vibrate(80);
 
@@ -933,9 +931,8 @@ function saveEntry(){
   banner.classList.add('show');
   undoTimer=setTimeout(()=>{banner.classList.remove('show');lastSavedEntry=null},5000);
 
-  // Update monat if active
-  const monatScreen=document.getElementById('screen-monat');
-  if(monatScreen.classList.contains('active')){renderMonat();monatDirty=false;}
+  // Always update monat so it's fresh when user switches
+  renderMonat();
 }
 
 function undoEntry(){
@@ -944,9 +941,7 @@ function undoEntry(){
   if(idx>-1)entries.splice(idx,1);
   lastSavedEntry=null;
   document.getElementById('undo-banner').classList.remove('show');
-  monatDirty=true;
-  const monatScreen=document.getElementById('screen-monat');
-  if(monatScreen.classList.contains('active'))renderMonat();
+  renderMonat();
 }
 
 // Init
