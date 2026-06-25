@@ -476,7 +476,7 @@ function checkLogin(){
   if(val===CORRECT_TOKEN){
     localStorage.setItem('hh_token',val);
     document.getElementById('login-screen').classList.remove('show');
-    initApp();
+    loadFromSheet();
   } else {
     document.getElementById('login-error').style.display='block';
     document.getElementById('login-input').value='';
@@ -486,7 +486,7 @@ function checkLogin(){
 function initAuth(){
   const stored=localStorage.getItem('hh_token');
   if(stored===CORRECT_TOKEN){
-    initApp();
+    loadFromSheet();
   } else {
     document.getElementById('login-screen').classList.add('show');
   }
