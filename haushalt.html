@@ -355,7 +355,8 @@ input:focus,select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 
   <div id="screen-verlauf" class="screen">
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
       <div style="display:flex;gap:4px" id="zeitraum-btns">
-        <button class="tgl-btn active" onclick="setZeitraum(this,3)">3M</button>
+        <button class="tgl-btn active" onclick="setZeitraum(this,0)">Alle</button>
+        <button class="tgl-btn" onclick="setZeitraum(this,3)">3M</button>
         <button class="tgl-btn" onclick="setZeitraum(this,6)">6M</button>
         <button class="tgl-btn" onclick="setZeitraum(this,12)">12M</button>
       </div>
@@ -461,7 +462,7 @@ function getBudgetForMonth(m,y){
 const _now=new Date();
 let currentMonth=_now.getMonth(),currentYear=_now.getFullYear();
 let monatFilterPerson='Alle',monatFilterKat='Ale',monatSort='datum';
-let vZeitraum=3,vPerson='Alle',vKat='Alle',vDateFrom='',vDateTo='';
+let vZeitraum=0,vPerson='Alle',vKat='Alle',vDateFrom='',vDateTo='';
 let abhakStatus={},ueberschuss={Dennis:0,Corinna:0};
 let verlaufChart=null;
 let selectedFlags=[],customFlags=[],customKats=[];
@@ -820,6 +821,11 @@ function getVMonths(){
     while(cur<=to){months.push({m:cur.getMonth(),y:cur.getFullYear()});cur=new Date(cur.getFullYear(),cur.getMonth()+1,1)}
     return months;
   }
+  // vZeitraum=0 means show all months that have data
+  if(vZeitraum===0){
+    const keys=[...new Set(entries.map(e=>{const d=new Date(e.datum);return d.getFullYear()*100+d.getMonth()}))].sort((a,b)=>a-b);
+    return keys.map(key=>({m:key%100,y:Math.floor(key/100)}));
+  }
   const now=new Date(),months=[];
   for(let i=vZeitraum-1;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);months.push({m:d.getMonth(),y:d.getFullYear()})}
   return months;
@@ -852,14 +858,16 @@ function renderVerlauf(){
     if(avg>0)avgHtml+=`<div class="stat-row"><span style="color:var(--text2)">${cat}</span><span style="font-weight:700">${fmt(avg)}</span></div>`;
   });
   document.getElementById('avg-breakdown').innerHTML=avgHtml;
-  document.getElementById('hist-title').textContent=`Monate (${months.length})`;
+  // Filter out months with no data when using fixed zeitraum
+  const monthsWithData = vZeitraum===0 ? months : months.filter(({m,y})=>getME(m,y).length>0);
+  document.getElementById('hist-title').textContent=`Monate (${monthsWithData.length})`;
   let histHtml='';
-  [...months].reverse().forEach(({m,y})=>{
+  [...monthsWithData].reverse().forEach(({m,y})=>{
     const c=calcMonth(m,y);
     const mKey=m+'-'+y;
     const done=abhakStatus[mKey],isOver=c.uebTotal>0;
     let sc='var(--blue)',st='Offen';
-    if(isOver&&done){sc='#C0392B';st=`🔒 +${fmt(c.uebTotal)} Überschuss`}
+    if(isOver&&done){sc='#C0392B';st='🔒 Abgehakt'}
     else if(isOver){sc='#C0392B';st=`+${fmt(c.uebTotal)} Überschuss`}
     else if(done){sc='#2E7D32';st='🔒 Abgehakt'}
     histHtml+=`<div class="hist-card"><div class="hist-header"><span style="font-weight:700;font-size:15px;letter-spacing:-0.02em">${monthName(m,y)}</span><span style="font-size:12px;color:${sc};font-weight:700">${st}</span></div><div style="padding:.85rem 1rem">`;
@@ -907,12 +915,12 @@ function clearVDates(){
   vZeitraum=3;renderVerlauf();
 }
 function updateVClearBtn(){
-  const hasExtra=vPerson!=='Alle'||vKat!=='Alle'||(vDateFrom&&vDateTo)||vZeitraum!==3;
+  const hasExtra=vPerson!=='Alle'||vKat!=='Alle'||(vDateFrom&&vDateTo)||vZeitraum!==0;
   document.getElementById('v-clear-btn').style.display=hasExtra?'block':'none';
   document.getElementById('v-drawer-btn').classList.toggle('has-active',vKat!=='Alle'||(vDateFrom&&vDateTo));
 }
 function clearVFilters(){
-  vPerson='Alle';vKat='Alle';vDateFrom='';vDateTo='';vZeitraum=3;
+  vPerson='Alle';vKat='Alle';vDateFrom='';vDateTo='';vZeitraum=0;
   document.getElementById('v-date-from').value='';document.getElementById('v-date-to').value='';
   document.getElementById('v-clear-dates').style.display='none';
   document.querySelectorAll('#zeitraum-btns .tgl-btn').forEach((b,i)=>b.classList.toggle('active',i===0));
