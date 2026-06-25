@@ -339,13 +339,22 @@ input:focus,select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 
         <button class="fchip" onclick="setMonatFilter('person','Corinna',this)">Corinna</button>
       </div>
       <div class="filter-label">Kategorie</div>
-      <div class="chip-row" id="mf-kat">
-        <button class="fchip active" onclick="setMonatFilter('kat','Alle',this)">Alle</button>
+      <div class="chip-row">
+        <button class="fchip active" id="mf-kat-alle" onclick="setMonatFilter('kat','Alle',this)">Alle</button>
+        <button class="fchip" onclick="setMonatFilter('kat','__budget__',this)">💰 Budget</button>
+        <button class="fchip" onclick="setMonatFilter('kat','__track__',this)">📋 Nur tracken</button>
       </div>
+      <div class="chip-row" id="mf-kat-budget" style="margin-top:-6px"></div>
+      <div class="chip-row" id="mf-kat-track" style="margin-top:-6px"></div>
+      <div class="filter-label">Flags</div>
+      <div class="chip-row" id="mf-flags"></div>
       <div class="filter-label">Sortierung</div>
       <div class="sort-row">
         <button class="fchip active" id="sort-datum" onclick="setSort('datum',this)">Datum</button>
         <button class="fchip" id="sort-betrag" onclick="setSort('betrag',this)">Betrag ↓</button>
+      </div>
+      <div style="margin-top:12px">
+        <button class="clear-all-btn" id="monat-clear-btn" onclick="clearMonatFilters()" style="display:none;width:100%;justify-content:center">× Filter löschen</button>
       </div>
     </div>
     <div class="card" id="eintraege-list" style="padding:.5rem 1.1rem"></div>
@@ -371,9 +380,14 @@ input:focus,select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 
     </div>
     <div class="filter-drawer" id="v-filter-drawer">
       <div class="filter-label">Kategorie</div>
-      <div class="chip-row" id="v-kat-chips">
-        <button class="fchip active" onclick="setVKat(this,'Alle')">Alle</button>
+      <div class="chip-row">
+        <button class="fchip active" id="v-kat-alle" onclick="setVKat(this,'Alle')">Alle</button>
+        <button class="fchip" onclick="setVKat(this,'__budget__')">💰 Budget</button>
+        <button class="fchip" onclick="setVKat(this,'__track__')">📋 Nur tracken</button>
       </div>
+      <div class="chip-row" id="v-kat-budget" style="margin-top:-6px"></div>
+      <div class="chip-row" id="v-kat-track" style="margin-top:-6px"></div>
+      <div class="chip-row" id="v-kat-chips" style="display:none"></div>
       <div class="filter-label">Exakter Zeitraum</div>
       <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
         <input type="date" id="v-date-from" onchange="onVDate()" style="flex:1;margin-bottom:0">
@@ -461,7 +475,7 @@ function getBudgetForMonth(m,y){
 
 const _now=new Date();
 let currentMonth=_now.getMonth(),currentYear=_now.getFullYear();
-let monatFilterPerson='Alle',monatFilterKat='Alle',monatSort='datum';
+let monatFilterPerson='Alle',monatFilterKat='Alle',monatFilterFlag='Alle',monatSort='datum';
 let vZeitraum=0,vPerson='Alle',vKat='Alle',vDateFrom='',vDateTo='';
 let abhakStatus={},ueberschuss={Dennis:0,Corinna:0};
 let verlaufChart=null;
@@ -745,8 +759,20 @@ function toggleMonatDrawer(){document.getElementById('monat-filter-drawer').clas
 function setMonatFilter(type,val,btn){
   if(type==='person')monatFilterPerson=val;
   if(type==='kat')monatFilterKat=val;
+  if(type==='flag')monatFilterFlag=val;
   btn.closest('.chip-row').querySelectorAll('.fchip').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
+  updateMonatFilterUI();renderEintraege();
+}
+
+function clearMonatFilters(){
+  monatFilterPerson='Alle';monatFilterKat='Alle';monatFilterFlag='Alle';monatSort='datum';
+  document.getElementById('mf-kat-alle').classList.add('active');
+  document.querySelectorAll('#mf-person .fchip')[0].classList.add('active');
+  document.querySelectorAll('#mf-person .fchip').forEach((b,i)=>b.classList.toggle('active',i===0));
+  document.querySelectorAll('#mf-flags .fchip').forEach((b,i)=>b.classList.toggle('active',i===0));
+  document.getElementById('sort-datum').classList.add('active');
+  document.getElementById('sort-betrag').classList.remove('active');
   updateMonatFilterUI();renderEintraege();
 }
 function setSort(val,btn){
@@ -755,11 +781,14 @@ function setSort(val,btn){
   btn.classList.add('active');renderEintraege();
 }
 function updateMonatFilterUI(){
-  const hasF=monatFilterPerson!=='Alle'||monatFilterKat!=='Alle';
+  const hasF=monatFilterPerson!=='Alle'||monatFilterKat!=='Alle'||monatFilterFlag!=='Alle';
   document.getElementById('monat-filter-btn').className='monat-drawer-btn'+(hasF?' has-filters':'');
+  const clearBtn=document.getElementById('monat-clear-btn');
+  if(clearBtn)clearBtn.style.display=hasF?'block':'none';
   const pills=[];
   if(monatFilterPerson!=='Alle')pills.push(monatFilterPerson);
-  if(monatFilterKat!=='Alle')pills.push(monatFilterKat);
+  if(monatFilterKat!=='Alle')pills.push(monatFilterKat==='__budget__'?'Budget':monatFilterKat==='__track__'?'Nur tracken':monatFilterKat);
+  if(monatFilterFlag!=='Alle')pills.push(monatFilterFlag);
   document.getElementById('monat-active-pills').innerHTML=pills.map(p=>`<span class="pill">${p}</span>`).join('');
 }
 
@@ -767,7 +796,10 @@ function renderEintraege(){
   const allMes=entries.filter(e=>{const d=new Date(e.datum);return d.getMonth()===currentMonth&&d.getFullYear()===currentYear});
   let filtered=allMes;
   if(monatFilterPerson!=='Alle')filtered=filtered.filter(e=>e.person===monatFilterPerson);
-  if(monatFilterKat!=='Alle')filtered=filtered.filter(e=>e.kat1===monatFilterKat);
+  if(monatFilterKat==='__budget__')filtered=filtered.filter(e=>BUDGET_CATS.includes(e.kat1));
+  else if(monatFilterKat==='__track__')filtered=filtered.filter(e=>TRACK_CATS.includes(e.kat1));
+  else if(monatFilterKat!=='Alle')filtered=filtered.filter(e=>e.kat1===monatFilterKat);
+  if(monatFilterFlag!=='Alle')filtered=filtered.filter(e=>(e.flags||[]).includes(monatFilterFlag));
   const sorted=[...filtered].sort((a,b)=>monatSort==='betrag'?b.betrag-a.betrag:new Date(b.datum)-new Date(a.datum));
   const total=sorted.reduce((s,e)=>s+e.betrag,0);
   let html=sorted.length?`<div style="font-size:11px;color:var(--text2);margin-bottom:8px;display:flex;justify-content:space-between;font-weight:600;text-transform:uppercase;letter-spacing:0.04em"><span>${sorted.length} Einträge</span><span>${fmt(total)}</span></div>`:'';
@@ -833,7 +865,8 @@ function getVMonths(){
 function filterVE(mes){
   let f=mes.filter(e=>!e.flags.includes(TILGUNG_FLAG));
   if(vPerson!=='Alle')f=f.filter(e=>e.person===vPerson);
-  if(vKat==='Budget Haushalt')f=f.filter(isBudget);
+  if(vKat==='__budget__'||vKat==='Budget Haushalt')f=f.filter(isBudget);
+  else if(vKat==='__track__')f=f.filter(e=>TRACK_CATS.includes(e.kat1));
   else if(vKat!=='Alle')f=f.filter(e=>e.kat1===vKat);
   return f;
 }
@@ -898,7 +931,8 @@ function setVPerson(btn,p){
 function toggleVDrawer(){document.getElementById('v-filter-drawer').classList.toggle('open')}
 function setVKat(btn,k){
   vKat=k;
-  document.querySelectorAll('#v-kat-chips .fchip').forEach(b=>b.classList.remove('active'));
+  // Clear all active states in verlauf filter
+  document.querySelectorAll('#v-filter-drawer .fchip').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');renderVerlauf();
 }
 function onVDate(){
