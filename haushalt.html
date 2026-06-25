@@ -529,12 +529,16 @@ function buildKatSelect(){
 }
 
 function buildKatFilterChips(){
-  const mfKat=document.getElementById('mf-kat');
-  mfKat.innerHTML='<button class="fchip active" onclick="setMonatFilter(\'kat\',\'Alle\',this)">Alle</button>';
-  allKats().forEach(k=>{mfKat.innerHTML+=`<button class="fchip" onclick="setMonatFilter('kat','${k}',this)">${k}</button>`});
-  const vKatChips=document.getElementById('v-kat-chips');
-  vKatChips.innerHTML='<button class="fchip active" onclick="setVKat(this,\'Alle\')">Alle</button><button class="fchip" onclick="setVKat(this,\'Budget Haushalt\')">Budget Haushalt</button>';
-  allKats().forEach(k=>{vKatChips.innerHTML+=`<button class="fchip" onclick="setVKat(this,'${k}')">${k}</button>`});
+  const mfBudget=document.getElementById('mf-kat-budget');
+  if(mfBudget) mfBudget.innerHTML=BUDGET_CATS.map(k=>`<button class="fchip" onclick="setMonatFilter('kat','${k}',this)">${k}</button>`).join('');
+  const mfTrack=document.getElementById('mf-kat-track');
+  if(mfTrack) mfTrack.innerHTML=TRACK_CATS.map(k=>`<button class="fchip" onclick="setMonatFilter('kat','${k}',this)">${k}</button>`).join('');
+  const mfFlags=document.getElementById('mf-flags');
+  if(mfFlags) mfFlags.innerHTML=['Alle',...allFlags()].map((f,i)=>`<button class="fchip${i===0?' active':''}" onclick="setMonatFilter('flag','${f}',this)">${f}</button>`).join('');
+  const vBudget=document.getElementById('v-kat-budget');
+  if(vBudget) vBudget.innerHTML=BUDGET_CATS.map(k=>`<button class="fchip" onclick="setVKat(this,'${k}')">${k}</button>`).join('');
+  const vTrack=document.getElementById('v-kat-track');
+  if(vTrack) vTrack.innerHTML=TRACK_CATS.map(k=>`<button class="fchip" onclick="setVKat(this,'${k}')">${k}</button>`).join('');
 }
 
 let newKatTypeBudget=true;
